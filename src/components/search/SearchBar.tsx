@@ -5,6 +5,7 @@ interface SearchBarProps {
   value: string
   onChange: (v: string) => void
   onClear: () => void
+  onSubmit?: () => void
   loading?: boolean
   placeholder?: string
   floating?: boolean
@@ -14,6 +15,7 @@ export function SearchBar({
   value,
   onChange,
   onClear,
+  onSubmit,
   loading = false,
   placeholder = 'Search city, state, or station…',
   floating = false,
@@ -40,6 +42,12 @@ export function SearchBar({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            inputRef.current?.blur()
+            onSubmit?.()
+          }
+        }}
         placeholder={placeholder}
         style={{
           flex: 1,

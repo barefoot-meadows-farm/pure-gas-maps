@@ -25,6 +25,28 @@ export function MapScreen() {
     panToLocation(station.lat, station.lng, 14)
   }
 
+  function handleSearchSubmit() {
+    if (results.length === 0) return
+
+    // Compute bounding box of all matching stations
+    let minLat = results[0].lat, maxLat = results[0].lat
+    let minLng = results[0].lng, maxLng = results[0].lng
+    for (const s of results) {
+      if (s.lat < minLat) minLat = s.lat
+      if (s.lat > maxLat) maxLat = s.lat
+      if (s.lng < minLng) minLng = s.lng
+      if (s.lng > maxLng) maxLng = s.lng
+    }
+
+    const centerLat = (minLat + maxLat) / 2
+    const centerLng = (minLng + maxLng) / 2
+    const spread = Math.max(maxLat - minLat, maxLng - minLng)
+    const zoom = spread < 0.1 ? 13 : spread < 0.3 ? 12 : spread < 1.0 ? 11 : spread < 3.0 ? 9 : 7
+
+    clearSearch()
+    panToLocation(centerLat, centerLng, zoom)
+  }
+
   function handleNearMe() {
     if (permissionState !== 'granted') {
       startWatching()
@@ -77,6 +99,7 @@ export function MapScreen() {
               value={query}
               onChange={setQuery}
               onClear={clearSearch}
+              onSubmit={handleSearchSubmit}
               loading={loading}
               floating
             />
