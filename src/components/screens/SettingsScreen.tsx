@@ -106,7 +106,7 @@ export function SettingsScreen() {
           >
             <ProgressBar
               value={syncProgress.completed / syncProgress.total}
-              label={`Updating… ${syncProgress.completed}/${syncProgress.total}`}
+              label={syncProgress.currentRegion ?? `Updating… ${syncProgress.completed}%`}
             />
           </div>
         )}

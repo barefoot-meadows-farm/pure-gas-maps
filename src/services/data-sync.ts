@@ -1,9 +1,9 @@
 import { Preferences } from '@capacitor/preferences'
 import { getDB } from '@/lib/db'
-import { ALL_REGIONS, getKmlUrl } from '@/constants/regions'
-import { CACHE_TTL_MS, LAST_SYNC_KEY, SYNC_CONCURRENCY } from '@/constants/cache'
+import { getKmzUrl } from '@/constants/regions'
+import { CACHE_TTL_MS, LAST_SYNC_KEY } from '@/constants/cache'
 import type { SyncProgress } from '@/types/app'
-import type { WorkerRequest, WorkerResponse } from '@/workers/kml-parser.worker'
+import type { WorkerResponse } from '@/workers/kml-parser.worker'
 
 export type ProgressCallback = (progress: SyncProgress) => void
 
@@ -17,164 +17,104 @@ export async function syncAllStations(
   onProgress: ProgressCallback,
   signal?: AbortSignal,
 ): Promise<void> {
-  const db = await getDB()
-  const progress: SyncProgress = {
-    total: ALL_REGIONS.length,
-    completed: 0,
-    failed: [],
-    currentRegion: null,
-  }
+  const url = getKmzUrl()
 
-  for (let i = 0; i < ALL_REGIONS.length; i += SYNC_CONCURRENCY) {
-    if (signal?.aborted) break
+  const worker = new Worker(
+    new URL('../workers/kml-parser.worker.ts', import.meta.url),
+    { type: 'module' },
+  )
 
-    const batch = ALL_REGIONS.slice(i, i + SYNC_CONCURRENCY)
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      worker.terminate()
+      reject(new Error('Aborted'))
+      return
+    }
 
-    await Promise.all(
-      batch.map(
-        (regionCode) =>
-          new Promise<void>((resolve) => {
-            if (signal?.aborted) {
-              resolve()
-              return
-            }
-
-            const worker = new Worker(
-              new URL('../workers/kml-parser.worker.ts', import.meta.url),
-              { type: 'module' },
-            )
-
-            progress.currentRegion = regionCode
-            onProgress({ ...progress })
-
-            const url = getKmlUrl(regionCode)
-            worker.postMessage({ regionCode, url } satisfies WorkerRequest)
-
-            worker.onmessage = async (event: MessageEvent<WorkerResponse>) => {
-              const { stations, error } = event.data
-              worker.terminate()
-
-              if (error || !stations) {
-                progress.failed.push(regionCode)
-              } else if (stations.length > 0) {
-                try {
-                  const tx = db.transaction('stations', 'readwrite')
-                  // Remove stale data for this region
-                  const existingKeys = await tx.store
-                    .index('by-region')
-                    .getAllKeys(regionCode)
-                  await Promise.all(existingKeys.map((key) => tx.store.delete(key)))
-                  // Insert new stations
-                  await Promise.all(stations.map((s) => tx.store.put(s)))
-                  await tx.done
-
-                  await db.put('cache_meta', {
-                    regionCode,
-                    fetchedAt: Date.now(),
-                    stationCount: stations.length,
-                    version: 1,
-                  })
-                } catch {
-                  progress.failed.push(regionCode)
-                }
-              }
-
-              progress.completed++
-              onProgress({ ...progress })
-              resolve()
-            }
-
-            worker.onerror = () => {
-              worker.terminate()
-              progress.failed.push(regionCode)
-              progress.completed++
-              onProgress({ ...progress })
-              resolve()
-            }
-          }),
-      ),
-    )
-  }
-
-  if (!signal?.aborted) {
-    await Preferences.set({
-      key: LAST_SYNC_KEY,
-      value: Date.now().toString(),
+    signal?.addEventListener('abort', () => {
+      worker.terminate()
+      reject(new Error('Aborted'))
     })
-  }
+
+    worker.onmessage = async (event: MessageEvent<WorkerResponse>) => {
+      const msg = event.data
+
+      if (msg.type === 'progress') {
+        // Map worker pct (0–1) to the first 85% of overall progress
+        const completed = Math.round(msg.pct * 85)
+        onProgress({
+          total: 100,
+          completed,
+          failed: [],
+          currentRegion: msg.phase,
+        })
+        return
+      }
+
+      if (msg.type === 'error') {
+        worker.terminate()
+        onProgress({ total: 100, completed: 100, failed: ['kmz'], currentRegion: null })
+        reject(new Error(msg.error))
+        return
+      }
+
+      if (msg.type === 'result') {
+        worker.terminate()
+
+        if (signal?.aborted) {
+          reject(new Error('Aborted'))
+          return
+        }
+
+        onProgress({ total: 100, completed: 90, failed: [], currentRegion: 'Saving to database…' })
+
+        try {
+          const db = await getDB()
+
+          // Clear existing data and re-insert everything in one transaction.
+          // All requests are fired synchronously (no intermediate awaits) to
+          // prevent the transaction auto-committing between IDB operations.
+          const tx = db.transaction(['stations', 'cache_meta'], 'readwrite')
+          const stationsStore = tx.objectStore('stations')
+          const metaStore = tx.objectStore('cache_meta')
+
+          stationsStore.clear()
+          metaStore.clear()
+          msg.stations.forEach((s) => stationsStore.put(s))
+          metaStore.put({
+            regionCode: 'ALL',
+            fetchedAt: Date.now(),
+            stationCount: msg.stations.length,
+            version: 1,
+          })
+
+          await tx.done
+
+          await Preferences.set({ key: LAST_SYNC_KEY, value: Date.now().toString() })
+        } catch (err) {
+          reject(err)
+          return
+        }
+
+        onProgress({ total: 100, completed: 100, failed: [], currentRegion: null })
+        resolve()
+      }
+    }
+
+    worker.onerror = (err) => {
+      worker.terminate()
+      onProgress({ total: 100, completed: 100, failed: ['kmz'], currentRegion: null })
+      reject(err)
+    }
+
+    worker.postMessage({ url })
+  })
 }
 
+/** With a single KMZ source there are no per-region failures — just re-run the full sync. */
 export async function retryFailedRegions(
-  failed: string[],
+  _failed: string[],
   onProgress: ProgressCallback,
 ): Promise<void> {
-  const db = await getDB()
-  const progress: SyncProgress = {
-    total: failed.length,
-    completed: 0,
-    failed: [],
-    currentRegion: null,
-  }
-
-  for (let i = 0; i < failed.length; i += SYNC_CONCURRENCY) {
-    const batch = failed.slice(i, i + SYNC_CONCURRENCY)
-
-    await Promise.all(
-      batch.map(
-        (regionCode) =>
-          new Promise<void>((resolve) => {
-            const worker = new Worker(
-              new URL('../workers/kml-parser.worker.ts', import.meta.url),
-              { type: 'module' },
-            )
-
-            progress.currentRegion = regionCode
-            onProgress({ ...progress })
-
-            const url = getKmlUrl(regionCode)
-            worker.postMessage({ regionCode, url } satisfies WorkerRequest)
-
-            worker.onmessage = async (event: MessageEvent<WorkerResponse>) => {
-              const { stations, error } = event.data
-              worker.terminate()
-
-              if (!error && stations && stations.length > 0) {
-                try {
-                  const tx = db.transaction('stations', 'readwrite')
-                  const existingKeys = await tx.store
-                    .index('by-region')
-                    .getAllKeys(regionCode)
-                  await Promise.all(existingKeys.map((key) => tx.store.delete(key)))
-                  await Promise.all(stations.map((s) => tx.store.put(s)))
-                  await tx.done
-
-                  await db.put('cache_meta', {
-                    regionCode,
-                    fetchedAt: Date.now(),
-                    stationCount: stations.length,
-                    version: 1,
-                  })
-                } catch {
-                  progress.failed.push(regionCode)
-                }
-              } else {
-                progress.failed.push(regionCode)
-              }
-
-              progress.completed++
-              onProgress({ ...progress })
-              resolve()
-            }
-
-            worker.onerror = () => {
-              worker.terminate()
-              progress.failed.push(regionCode)
-              progress.completed++
-              onProgress({ ...progress })
-              resolve()
-            }
-          }),
-      ),
-    )
-  }
+  return syncAllStations(onProgress)
 }

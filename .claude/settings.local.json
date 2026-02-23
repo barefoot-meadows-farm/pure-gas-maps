@@ -16,7 +16,13 @@
       "Bash(pod install)",
       "Bash(npx cap sync:*)",
       "Bash(node:*)",
-      "Bash(node_modules/.bin/cap:*)"
+      "Bash(node_modules/.bin/cap:*)",
+      "Bash(curl:*)",
+      "Bash(# Search for the context around the kml?swLat= URL to find the full query string pattern curl -s -A \"\"Mozilla/5.0\"\" \"\"https://www.pure-gas.org/static/js/main.7f1ae976.js\"\")",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(echo:*)",
+      "Bash(unzip:*)",
+      "Bash(python3:*)"
     ]
   }
 }

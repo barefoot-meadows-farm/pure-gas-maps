@@ -64,7 +64,7 @@ export function StationCard({ station }: StationCardProps) {
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-          <FuelBadge octane={station.octane} size="sm" />
+          <FuelBadge octanes={station.octanes ?? [station.octane]} size="sm" />
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>
             {formatDistance(station.distanceKm)}
           </span>

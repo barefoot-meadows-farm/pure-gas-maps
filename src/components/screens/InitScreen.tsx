@@ -65,25 +65,8 @@ export function InitScreen() {
         <div style={{ width: '100%' }}>
           <ProgressBar
             value={progress}
-            label={
-              syncProgress
-                ? `Loading stations… ${syncProgress.completed} of ${syncProgress.total}`
-                : 'Preparing…'
-            }
+            label={syncProgress?.currentRegion ?? 'Preparing…'}
           />
-
-          {syncProgress?.currentRegion && (
-            <p
-              style={{
-                marginTop: 8,
-                textAlign: 'center',
-                fontSize: 12,
-                color: 'var(--text-tertiary)',
-              }}
-            >
-              {syncProgress.currentRegion}
-            </p>
-          )}
         </div>
 
         <p
@@ -95,7 +78,7 @@ export function InitScreen() {
             lineHeight: 1.5,
           }}
         >
-          Downloading station data for all 50 states.{'\n'}
+          Downloading ethanol-free station data for the US &amp; Canada.{'\n'}
           This only happens once.
         </p>
       </SafeArea>

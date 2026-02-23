@@ -27,7 +27,7 @@ export function StationDetail({ station }: StationDetailProps) {
         >
           {station.name}
         </h2>
-        <FuelBadge octane={station.octane} />
+        <FuelBadge octanes={station.octanes ?? [station.octane]} />
       </div>
 
       {/* Address */}

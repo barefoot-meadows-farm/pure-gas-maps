@@ -50,15 +50,42 @@ export async function searchStations(
   const q = query.toLowerCase().trim()
   if (!q || q.length < 2) return []
 
+  // Detect "City, ST" (comma) or "City ST" (trailing 2-letter word) patterns
+  // so that "Cleveland, TN" and "Cleveland TN" both work as combined queries.
+  let cityPart = ''
+  let statePart = ''
+  const commaIdx = q.indexOf(',')
+  if (commaIdx > 0) {
+    cityPart = q.slice(0, commaIdx).trim()
+    statePart = q.slice(commaIdx + 1).trim()
+  } else {
+    const spaceIdx = q.lastIndexOf(' ')
+    if (spaceIdx > 0 && q.length - spaceIdx - 1 === 2) {
+      cityPart = q.slice(0, spaceIdx).trim()
+      statePart = q.slice(spaceIdx + 1).trim()
+    }
+  }
+
   const all = await db.getAll('stations')
   return all
-    .filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.city.toLowerCase().includes(q) ||
-        s.state.toLowerCase() === q ||
-        (s.zip && s.zip.startsWith(q)),
-    )
+    .filter((s) => {
+      const city = s.city.toLowerCase()
+      const state = s.state.toLowerCase()
+      const name = s.name.toLowerCase()
+
+      // Combined city+state query (e.g. "Cleveland, TN" or "Cleveland TN")
+      if (cityPart && statePart) {
+        return city.includes(cityPart) && state.startsWith(statePart)
+      }
+
+      // Single-term: name, city, exact state code, or zip prefix
+      return (
+        name.includes(q) ||
+        city.includes(q) ||
+        state === q ||
+        (s.zip != null && s.zip.startsWith(q))
+      )
+    })
     .slice(0, limit)
 }
 

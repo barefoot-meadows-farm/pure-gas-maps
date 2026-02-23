@@ -1,7 +1,7 @@
 import { formatOctane } from '@/lib/format'
 
 interface FuelBadgeProps {
-  octane: number
+  octanes: number[]
   size?: 'sm' | 'md'
 }
 
@@ -11,7 +11,7 @@ function getBadgeColors(octane: number) {
   return { bg: 'var(--badge-87)', color: 'var(--badge-87-text)' }
 }
 
-export function FuelBadge({ octane, size = 'md' }: FuelBadgeProps) {
+function SingleBadge({ octane, size = 'md' }: { octane: number; size?: 'sm' | 'md' }) {
   const { bg, color } = getBadgeColors(octane)
   const isSmall = size === 'sm'
 
@@ -33,5 +33,18 @@ export function FuelBadge({ octane, size = 'md' }: FuelBadgeProps) {
       <span style={{ opacity: 0.7, fontSize: isSmall ? 9 : 11 }}>E0</span>
       {formatOctane(octane)}
     </span>
+  )
+}
+
+export function FuelBadge({ octanes, size = 'md' }: FuelBadgeProps) {
+  // Sort ascending so Regular appears before Premium
+  const sorted = [...octanes].sort((a, b) => a - b)
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {sorted.map((oct) => (
+        <SingleBadge key={oct} octane={oct} size={size} />
+      ))}
+    </div>
   )
 }

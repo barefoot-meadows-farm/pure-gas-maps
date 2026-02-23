@@ -9,7 +9,10 @@ export interface GasStation {
   zip: string
   phone: string
   fuelType: FuelType
+  /** Highest available octane grade — drives fuelType classification */
   octane: number
+  /** All octane grades offered, e.g. [87, 93] for a dual-grade station */
+  octanes: number[]
   lat: number
   lng: number
   regionCode: string

@@ -61,16 +61,21 @@ export function useAppInit() {
         abortRef.current = new AbortController()
         setIsSyncing(true)
 
-        await syncAllStations((progress) => {
-          setSyncProgress(progress)
-          if (progress.completed === progress.total) {
-            setFailedRegions(progress.failed)
-          }
-        }, abortRef.current.signal)
-
-        setIsSyncing(false)
-        setHasData(true)
-        setInitialized(true)
+        try {
+          await syncAllStations((progress) => {
+            setSyncProgress(progress)
+            if (progress.completed === progress.total) {
+              setFailedRegions(progress.failed)
+            }
+          }, abortRef.current.signal)
+          setHasData(true)
+        } catch (err) {
+          console.error('Initial sync failed:', err)
+          // Still show the app — user can retry from Settings
+        } finally {
+          setIsSyncing(false)
+          setInitialized(true)
+        }
       } else {
         // Has data: show app immediately
         setInitialized(true)

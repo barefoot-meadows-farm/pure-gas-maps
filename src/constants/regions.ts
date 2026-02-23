@@ -13,9 +13,9 @@ export const CA_PROVINCES = [
 
 export const ALL_REGIONS = [...US_STATES, ...CA_PROVINCES]
 
-export function getKmlUrl(regionCode: string): string {
-  const base = import.meta.env.DEV
-    ? '/kml-proxy/temp'
-    : 'https://www.pure-gas.org/temp'
-  return `${base}/pure-gas-${regionCode.toLowerCase()}.kml`
+/** Single KMZ file containing all US + Canada ethanol-free stations */
+export function getKmzUrl(): string {
+  return import.meta.env.DEV
+    ? '/kmz-proxy/download/pure-gas.kmz'
+    : 'https://www.pure-gas.org/download/pure-gas.kmz'
 }

@@ -25,10 +25,10 @@ export default defineConfig({
     port: 5173,
     host: '0.0.0.0',
     proxy: {
-      '/kml-proxy': {
+      '/kmz-proxy': {
         target: 'https://www.pure-gas.org',
         changeOrigin: true,
-        rewrite: (path) => path.replace('/kml-proxy', ''),
+        rewrite: (path) => path.replace('/kmz-proxy', ''),
       },
     },
   },

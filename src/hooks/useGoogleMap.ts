@@ -37,7 +37,7 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
     const markerOptions = stations.map((s: GasStation) => ({
       coordinate: { lat: s.lat, lng: s.lng },
       title: s.name,
-      snippet: `${s.octane} octane · ${s.city}`,
+      snippet: `${(s.octanes ?? [s.octane]).join('/')} octane · ${s.city}`,
     }))
 
     const addedIds = await map.addMarkers(markerOptions)
