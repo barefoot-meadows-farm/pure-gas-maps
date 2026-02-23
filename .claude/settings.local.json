@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config:*)",
+      "WebFetch(domain:www.pure-gas.org)",
+      "Bash(npm info:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:capacitorjs.com)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx cap init:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx cap add ios:*)",
+      "Bash(npx cap add:*)",
+      "Bash(pod install)",
+      "Bash(npx cap sync:*)",
+      "Bash(node:*)",
+      "Bash(node_modules/.bin/cap:*)"
+    ]
+  }
+}
