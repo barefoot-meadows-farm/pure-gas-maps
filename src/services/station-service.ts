@@ -1,18 +1,31 @@
 import { getDB } from '@/lib/db'
 import { haversineDistance } from '@/lib/geo'
-import type { GasStation, GasStationWithDistance } from '@/types/station'
+import type { GasStation, GasStationWithDistance, FuelType } from '@/types/station'
 import type { BoundingBox } from '@/lib/geo'
 import { VIEWPORT_MAX_STATIONS } from '@/constants/map'
+
+/** Returns true if the station offers at least one octane grade matching the filter. */
+function matchesGradeFilter(s: GasStation, filter: FuelType | null): boolean {
+  if (!filter) return true
+  const octanes = s.octanes ?? [s.octane]
+  switch (filter) {
+    case 'E0':          return octanes.some((o) => o >= 85 && o <= 88)
+    case 'E0-Midgrade': return octanes.some((o) => o >= 89 && o <= 90)
+    case 'E0-Premium':  return octanes.some((o) => o >= 91)
+    default:            return true
+  }
+}
 
 export async function getStationsInBounds(
   bounds: BoundingBox,
   limit = VIEWPORT_MAX_STATIONS,
+  gradeFilter: FuelType | null = null,
 ): Promise<GasStation[]> {
   const db = await getDB()
   const range = IDBKeyRange.bound(bounds.south, bounds.north)
   const candidates = await db.getAllFromIndex('stations', 'by-lat', range)
   return candidates
-    .filter((s) => s.lng >= bounds.west && s.lng <= bounds.east)
+    .filter((s) => s.lng >= bounds.west && s.lng <= bounds.east && matchesGradeFilter(s, gradeFilter))
     .slice(0, limit)
 }
 
@@ -21,6 +34,7 @@ export async function getNearbyStations(
   lng: number,
   radiusKm: number,
   limit = 100,
+  gradeFilter: FuelType | null = null,
 ): Promise<GasStationWithDistance[]> {
   const delta = radiusKm / 111
   const bounds: BoundingBox = {
@@ -30,7 +44,8 @@ export async function getNearbyStations(
     west: lng - delta * 1.5,
   }
 
-  const candidates = await getStationsInBounds(bounds, 2000)
+  // Pass a generous candidate limit before distance filter; grade filter applied inside
+  const candidates = await getStationsInBounds(bounds, 2000, gradeFilter)
 
   return candidates
     .map((s) => ({
@@ -45,6 +60,7 @@ export async function getNearbyStations(
 export async function searchStations(
   query: string,
   limit = 30,
+  gradeFilter: FuelType | null = null,
 ): Promise<GasStation[]> {
   const db = await getDB()
   const q = query.toLowerCase().trim()
@@ -69,6 +85,8 @@ export async function searchStations(
   const all = await db.getAll('stations')
   return all
     .filter((s) => {
+      if (!matchesGradeFilter(s, gradeFilter)) return false
+
       const city = s.city.toLowerCase()
       const state = s.state.toLowerCase()
       const name = s.name.toLowerCase()

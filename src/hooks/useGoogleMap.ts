@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { GoogleMap } from '@capacitor/google-maps'
-import { useMapStore, useLocationStore } from '@/store'
+import { useMapStore, useLocationStore, useAppStore } from '@/store'
 import { getStationsInBounds } from '@/services/station-service'
 import { getStationById } from '@/services/station-service'
 import { DEFAULT_CENTER, DEFAULT_ZOOM, MARKER_UPDATE_DEBOUNCE_MS } from '@/constants/map'
 import type { BoundingBox } from '@/lib/geo'
-import type { GasStation } from '@/types/station'
+import type { FuelType, GasStation } from '@/types/station'
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string
 
@@ -13,16 +13,22 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
   const mapInstanceRef = useRef<GoogleMap | null>(null)
   const markerIdMapRef = useRef<Map<string, string>>(new Map()) // markerId -> stationId
   const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastBoundsRef = useRef<BoundingBox | null>(null)
+  // Keep a ref so the async marker update always reads the latest filter value
+  const gradeFilterRef = useRef<FuelType | null>(null)
 
   const { selectStation, setMarkerIdMap } = useMapStore()
   const userLat = useLocationStore((s) => s.lat)
   const userLng = useLocationStore((s) => s.lng)
+  const gradeFilter = useAppStore((s) => s.gradeFilter)
+  gradeFilterRef.current = gradeFilter
 
   const updateMarkersForBounds = useCallback(async (bounds: BoundingBox) => {
     const map = mapInstanceRef.current
     if (!map) return
 
-    const stations = await getStationsInBounds(bounds)
+    lastBoundsRef.current = bounds
+    const stations = await getStationsInBounds(bounds, undefined, gradeFilterRef.current)
 
     // Remove all existing markers
     const existingIds = Array.from(markerIdMapRef.current.keys())
@@ -57,6 +63,13 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
       updateMarkersForBounds(bounds)
     }, MARKER_UPDATE_DEBOUNCE_MS)
   }, [updateMarkersForBounds])
+
+  // Re-draw markers whenever the grade filter changes
+  useEffect(() => {
+    if (lastBoundsRef.current) {
+      updateMarkersForBounds(lastBoundsRef.current)
+    }
+  }, [gradeFilter, updateMarkersForBounds])
 
   // Initialize map
   useEffect(() => {

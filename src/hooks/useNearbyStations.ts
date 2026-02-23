@@ -1,31 +1,35 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocationStore } from '@/store'
+import { useLocationStore, useAppStore } from '@/store'
 import { getNearbyStations } from '@/services/station-service'
 import { NEARBY_RADIUS_KM } from '@/constants/map'
-import type { GasStationWithDistance } from '@/types/station'
+import type { GasStationWithDistance, FuelType } from '@/types/station'
 
 export function useNearbyStations(limit = 50) {
   const lat = useLocationStore((s) => s.lat)
   const lng = useLocationStore((s) => s.lng)
+  const gradeFilter = useAppStore((s) => s.gradeFilter)
+
   const [stations, setStations] = useState<GasStationWithDistance[]>([])
   const [loading, setLoading] = useState(false)
-  const prevCoords = useRef<{ lat: number; lng: number } | null>(null)
+
+  // Track previous fetch state; re-fetch if location moved OR filter changed
+  const prevRef = useRef<{ lat: number; lng: number; gradeFilter: FuelType | null } | null>(null)
 
   useEffect(() => {
     if (lat === null || lng === null) return
 
-    // Only refetch if moved more than ~0.5km
-    const prev = prevCoords.current
+    // Only skip if location hasn't moved AND the filter is unchanged
+    const prev = prevRef.current
     if (prev) {
       const distMoved = Math.hypot(lat - prev.lat, lng - prev.lng) * 111
-      if (distMoved < 0.5) return
+      if (distMoved < 0.5 && prev.gradeFilter === gradeFilter) return
     }
-    prevCoords.current = { lat, lng }
+    prevRef.current = { lat, lng, gradeFilter }
 
     let cancelled = false
     setLoading(true)
 
-    getNearbyStations(lat, lng, NEARBY_RADIUS_KM, limit)
+    getNearbyStations(lat, lng, NEARBY_RADIUS_KM, limit, gradeFilter)
       .then((results) => {
         if (!cancelled) setStations(results)
       })
@@ -36,7 +40,7 @@ export function useNearbyStations(limit = 50) {
     return () => {
       cancelled = true
     }
-  }, [lat, lng, limit])
+  }, [lat, lng, limit, gradeFilter])
 
   return { stations, loading }
 }

@@ -3,6 +3,7 @@ import { useStationSearch } from '@/hooks/useStationSearch'
 import { useLocationStore } from '@/store'
 import { StationCard } from '@/components/station/StationCard'
 import { SearchBar } from '@/components/search/SearchBar'
+import { GradeFilterBar } from '@/components/station/GradeFilterBar'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { SafeArea } from '@/components/layout/SafeArea'
 import type { GasStationWithDistance } from '@/types/station'
@@ -48,6 +49,9 @@ export function ListScreen() {
             onClear={clearSearch}
             loading={searchLoading}
           />
+          <div style={{ marginTop: 10 }}>
+            <GradeFilterBar />
+          </div>
         </div>
       </SafeArea>
 

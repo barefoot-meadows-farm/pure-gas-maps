@@ -6,6 +6,7 @@ import { useMapStore, useAppStore } from '@/store'
 import { SearchBar } from '@/components/search/SearchBar'
 import { SearchResults } from '@/components/search/SearchResults'
 import { StationBottomSheet } from '@/components/station/StationBottomSheet'
+import { GradeFilterBar } from '@/components/station/GradeFilterBar'
 import { SafeArea } from '@/components/layout/SafeArea'
 import type { GasStation } from '@/types/station'
 
@@ -82,6 +83,9 @@ export function MapScreen() {
             {results.length > 0 && (
               <SearchResults results={results} onSelect={handleSelectResult} />
             )}
+            <div style={{ marginTop: 8 }}>
+              <GradeFilterBar />
+            </div>
           </div>
         </SafeArea>
 
