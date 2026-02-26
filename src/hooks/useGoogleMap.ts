@@ -1,19 +1,23 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { GoogleMap } from '@capacitor/google-maps'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { useMapStore, useLocationStore, useAppStore } from '@/store'
 import { getStationsInBounds } from '@/services/station-service'
 import { getStationById } from '@/services/station-service'
-import { DEFAULT_CENTER, DEFAULT_ZOOM, MARKER_UPDATE_DEBOUNCE_MS } from '@/constants/map'
+import { DEFAULT_CENTER, DEFAULT_ZOOM, MARKER_UPDATE_DEBOUNCE_MS, MIN_ZOOM_FOR_MARKERS, LOCATION_ZOOM } from '@/constants/map'
 import type { BoundingBox } from '@/lib/geo'
 import type { FuelType, GasStation } from '@/types/station'
 
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string
+const GOOGLE_MAPS_KEY = Capacitor.getPlatform() === 'ios'
+  ? import.meta.env.VITE_GOOGLE_MAPS_KEY_IOS as string
+  : import.meta.env.VITE_GOOGLE_MAPS_KEY_WEB as string
 
 export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
   const mapInstanceRef = useRef<GoogleMap | null>(null)
   const markerIdMapRef = useRef<Map<string, string>>(new Map()) // markerId -> stationId
   const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastBoundsRef = useRef<BoundingBox | null>(null)
+  const currentZoomRef = useRef<number>(DEFAULT_ZOOM)
   // Keep a ref so the async marker update always reads the latest filter value
   const gradeFilterRef = useRef<FuelType | null>(null)
 
@@ -26,6 +30,17 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
   const updateMarkersForBounds = useCallback(async (bounds: BoundingBox) => {
     const map = mapInstanceRef.current
     if (!map) return
+
+    // Clear markers and bail if not zoomed in enough
+    if (currentZoomRef.current < MIN_ZOOM_FOR_MARKERS) {
+      const existingIds = Array.from(markerIdMapRef.current.keys())
+      if (existingIds.length > 0) {
+        await map.removeMarkers(existingIds)
+        markerIdMapRef.current.clear()
+        setMarkerIdMap(new Map())
+      }
+      return
+    }
 
     lastBoundsRef.current = bounds
     const stations = await getStationsInBounds(bounds, undefined, gradeFilterRef.current)
@@ -80,6 +95,19 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
     async function createMap() {
       if (!mapRef.current) return
 
+      // Register onMapReady BEFORE create() to avoid the race where native
+      // render()'s DispatchQueue.main.async fires before the SDK's own listener
+      // is set up (which only happens after create() resolves).
+      let resolveReady!: () => void
+      const mapReady = new Promise<void>((r) => { resolveReady = r })
+      const nativePlugin = registerPlugin<any>('CapacitorGoogleMaps')
+      const readyListener = await nativePlugin.addListener(
+        'onMapReady',
+        (data: { mapId: string }) => {
+          if (data.mapId === 'pure-gas-map') resolveReady()
+        },
+      )
+
       map = await GoogleMap.create({
         id: 'pure-gas-map',
         element: mapRef.current,
@@ -89,6 +117,9 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
           zoom: DEFAULT_ZOOM,
         },
       })
+
+      await mapReady
+      readyListener.remove()
 
       await map.enableClustering(3)
       await map.enableCurrentLocation(true)
@@ -103,8 +134,9 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
         if (station) selectStation(station)
       })
 
-      // Handle camera movement
-      await map.setOnCameraIdleListener(async () => {
+      // Handle camera movement — capture zoom so marker loading can be gated
+      await map.setOnCameraIdleListener(async ({ zoom }) => {
+        currentZoomRef.current = zoom
         const bounds = await map!.getMapBounds()
         scheduleMarkerUpdate({
           north: bounds.northeast.lat,
@@ -119,14 +151,8 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
         useMapStore.getState().setBottomSheetOpen(false)
       })
 
-      // Initial marker load at default view
-      const initialBounds: BoundingBox = {
-        north: DEFAULT_CENTER.lat + 5,
-        south: DEFAULT_CENTER.lat - 5,
-        east: DEFAULT_CENTER.lng + 8,
-        west: DEFAULT_CENTER.lng - 8,
-      }
-      await updateMarkersForBounds(initialBounds)
+      // Markers load automatically once the user zooms in past MIN_ZOOM_FOR_MARKERS
+      // via the camera idle listener above — no initial load needed.
     }
 
     createMap()
@@ -137,14 +163,17 @@ export function useGoogleMap(mapRef: React.RefObject<HTMLElement>) {
     }
   }, [mapRef]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pan to user location when it becomes available
+  // Pan to user location on first fix only — don't chase every GPS accuracy update
+  const hasPannedToLocationRef = useRef(false)
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || userLat === null || userLng === null) return
+    if (hasPannedToLocationRef.current) return
 
+    hasPannedToLocationRef.current = true
     map.setCamera({
       coordinate: { lat: userLat, lng: userLng },
-      zoom: 12,
+      zoom: LOCATION_ZOOM,
       animate: true,
     })
   }, [userLat, userLng])

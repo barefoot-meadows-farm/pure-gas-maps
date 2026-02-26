@@ -68,7 +68,7 @@ export function MapScreen() {
       }}
     >
       {/* Native map element — @capacitor/google-maps attaches here */}
-      <capacitor-google-maps
+      <capacitor-google-map
         ref={mapRef as React.RefObject<HTMLElement>}
         style={{
           display: 'block',

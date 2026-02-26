@@ -27,6 +27,9 @@ export async function onRequestGet() {
       'Content-Type': 'application/vnd.google-earth.kmz',
       // Cache at the edge for 1 hour — pure-gas.org updates infrequently
       'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+      // Allow cross-origin fetches from the native app (capacitor://localhost)
+      // and any other origin (web PWA, dev server, etc.)
+      'Access-Control-Allow-Origin': '*',
     },
   })
 }

@@ -16,9 +16,11 @@ export const ALL_REGIONS = [...US_STATES, ...CA_PROVINCES]
 /** Single KMZ file containing all US + Canada ethanol-free stations */
 export function getKmzUrl(): string {
   // In dev, the Vite server proxy handles /kmz-proxy → pure-gas.org (see vite.config.ts).
-  // In production, the Cloudflare Pages Function at functions/api/kmz.js proxies
+  // In production web, the Cloudflare Pages Function at functions/api/kmz.js proxies
   // the request server-side, avoiding the CORS block from pure-gas.org.
-  return import.meta.env.DEV
-    ? '/kmz-proxy/download/pure-gas.kmz'
-    : '/api/kmz'
+  // On native (Capacitor iOS/Android), the app runs at capacitor://localhost so relative
+  // paths don't hit the Cloudflare Function — use the absolute deployed URL instead.
+  if (import.meta.env.DEV) return '/kmz-proxy/download/pure-gas.kmz'
+  const base = import.meta.env.VITE_API_BASE_URL ?? ''
+  return `${base}/api/kmz`
 }
